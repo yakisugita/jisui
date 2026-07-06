@@ -1,7 +1,7 @@
 {
   "name": "jisui",
   "scripts": {
-    "dev": "bun run --hot src/index.ts"
+    "dev": "bun run --hot src/index.tsx"
   },
   "dependencies": {
     "hono": "^4.12.27"
