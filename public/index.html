@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOP PAGE</title>
+</head>
+<body>
+    <h1>TOP PAGE</h1>
+    <button id="btn">Request</button>
+    <p>Basic認証情報</p>
+    <input type="text" id="user"><br>
+    <input type="password" id="pass">
+
+    <script>
+        const btn = document.getElementById("btn")
+        btn.addEventListener("click", async () => {
+            const username = document.getElementById("user").value
+            const password = document.getElementById("pass").value
+
+            const response = await fetch("/posts", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: "Basic " + btoa(`${username}:${password}`)
+                },
+                body: JSON.stringify({
+                    public: "Public content",
+                    private: "Private content",
+                    datetime: new Date().toISOString(),
+                    title: "Sample Post",
+                    is_private: false
+                })
+            });
+            const data = await response.json();
+            console.log(data);
+        });
+    </script>
+</body>
+</html>
