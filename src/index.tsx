@@ -43,6 +43,8 @@ function convertToHTML(posts: any[]): string {
   for (const post of posts) {
     if (post.datetime.slice(0, 10) === lastDate) {
       sameDateCount++
+    } else {
+      sameDateCount = 0
     }
     html += `<li>${post.datetime} - ${post.title} (同日投稿${sameDateCount}件目)</li>`
     lastDate = post.datetime.slice(0, 10) // 日付部分だけを比較するためにスライス
@@ -66,11 +68,6 @@ app.use('*', appendTrailingSlash())
 // とりあえず静的ファイルで対応、あとでjsxにする
 app.use('/', serveStatic({ path: './public/index.html' }))
 // 最近の投稿、投稿カレンダー、などなど
-// app.get('/', (c) => {
-//   // 投稿をすべて取得してログ出力
-//   db.query('SELECT * FROM posts').all().forEach((row) => {
-//     console.log(row)
-//   })
 
 //   return c.text('TOP PAGE')
 // })
