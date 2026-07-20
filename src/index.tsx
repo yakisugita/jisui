@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { appendTrailingSlash } from 'hono/trailing-slash'
 import { basicAuth } from 'hono/basic-auth'
 import { env } from 'hono/adapter'
+import type { FC } from 'hono/jsx'
 import { Database } from 'bun:sqlite';
 import { serveStatic } from 'hono/bun'
 // https://yaakai.to/note/92
@@ -19,7 +20,6 @@ function getPostsByDateRange(startDate: string, endDate: string) {
   const query = db.query(`SELECT * FROM posts WHERE datetime BETWEEN DATETIME($start) AND DATETIME($end) ORDER BY datetime ASC`)
   const posts = query.all({ start: startDate, end: endDate })
 
-  console.log(posts)
   return posts
 }
 
@@ -35,8 +35,8 @@ function formatDateTime(date: Date): string {
 }
 
 // DBの結果から表示用コンポーネントに変換
-function convertToHTML(posts: any[]): string {
-  let html = '<ul>'
+function withSameDateCount(posts: any[]): any[] {
+  const resultPosts = []
   // 重複カウント
   let lastDate = ''
   let sameDateCount = 0
@@ -46,11 +46,10 @@ function convertToHTML(posts: any[]): string {
     } else {
       sameDateCount = 0
     }
-    html += `<li>${post.datetime} - ${post.title} (同日投稿${sameDateCount}件目)</li>`
+    resultPosts.push({ ...post, sameDateCount })
     lastDate = post.datetime.slice(0, 10) // 日付部分だけを比較するためにスライス
   }
-  html += '</ul>'
-  return html
+  return resultPosts
 }
 
 const db = new Database("mydb.sqlite", { create: true, strict: true });
@@ -60,6 +59,42 @@ db.run('CREATE TABLE IF NOT EXISTS recipes (id UUID, title TEXT, content TEXT, c
 db.run('CREATE TABLE IF NOT EXISTS images (id UUID, post_id UUID, recipe_id UUID, order_num INTEGER, created_at datetime, updated_at datetime, is_private BOOLEAN)')
 
 const app = new Hono()
+
+// JSX
+const Layout: FC = (props) => {
+  return (
+    <html>
+      <body>{props.children}</body>
+    </html>
+  )
+}
+
+const PostList: FC<{ posts: Array<{ datetime: string; title: string; sameDateCount: number }>; title: string }> = (props: {
+  posts: Array<{ datetime: string; title: string; sameDateCount: number }>
+  title: string
+}) => {
+  return (
+    <Layout>
+      <h1>{props.title}</h1>
+      <ul>
+        {props.posts.map((post) => {
+          return <li>{post} {post.datetime} - {post.title} (同日投稿{post.sameDateCount}件目)</li>
+        })}
+      </ul>
+    </Layout>
+  )
+}
+
+const Page: FC<{ post: { datetime: string; title: string; content_public: string; content_private: string; is_private: boolean } }> = (props) => {
+  return (
+    <Layout>
+      <h1>{props.post.title}</h1>
+      <p>{props.post.datetime}</p>
+      <div>{props.post.content_public}</div>
+      {props.post.is_private && <div>この投稿は非公開です。</div>}
+    </Layout>
+  )
+}
 
 // 末尾スラッシュありで統一
 app.use('*', appendTrailingSlash())
@@ -80,66 +115,35 @@ app.get('/posts/:yyyy/', (c) => {
   const { yyyy } = c.req.param()
   
   const posts = getPostsByDateRange(formatDateTime(new Date(`${yyyy}-01-01T00:00:00`)), formatDateTime(new Date(`${yyyy}-12-31T23:59:59`)))
-  return c.html(
-    `<html>
-        <head>
-          <title>タイトル</title>
-        </head>
-        <body>
-          <p>:calendar: - ${yyyy}年</p>
-          ${convertToHTML(posts)}
-        </body>
-      </html>`
-  )
+  return c.html(<PostList posts={withSameDateCount(posts)} title={`:calender: - ${yyyy}年`} />)
 })
 
 app.get('/posts/:yyyy/:mm/', (c) => {
   const { yyyy, mm } = c.req.param()
 
   const posts = getPostsByDateRange(formatDateTime(new Date(`${yyyy}-${mm}-01T00:00:00`)), formatDateTime(new Date(`${yyyy}-${mm}-31T23:59:59`)))
-  return c.html(
-    `<html>
-        <head>
-          <title>タイトル</title>
-        </head>
-        <body>
-          <p>:calendar: - ${yyyy}年${mm}月</p>
-          ${convertToHTML(posts)}
-        </body>
-      </html>`
-  )
+  return c.html(<PostList posts={withSameDateCount(posts)} title={`:calender: - ${yyyy}年${mm}月`} />)
 })
 
 app.get('/posts/:yyyy/:mm/:dd/', (c) => {
   const { yyyy, mm, dd } = c.req.param()
 
   const posts = getPostsByDateRange(formatDateTime(new Date(`${yyyy}-${mm}-${dd}T00:00:00`)), formatDateTime(new Date(`${yyyy}-${mm}-${dd}T23:59:59`)))
-  
-  return c.html(
-    `<html>
-        <head>
-          <title>タイトル</title>
-        </head>
-        <body>
-          <p>:calendar: - ${yyyy}年${mm}月${dd}日</p>
-          ${convertToHTML(posts)}
-        </body>
-      </html>`
-  )
+  return c.html(<PostList posts={withSameDateCount(posts)} title={`:calender: - ${yyyy}年${mm}月${dd}日`} />)
 })
 
 app.get('/posts/:yyyy/:mm/:dd/:number', (c) => {
   const { yyyy, mm, dd, number } = c.req.param()
 
   const query = db.query(`SELECT * FROM posts WHERE datetime BETWEEN DATETIME($start) AND DATETIME($end) ORDER BY datetime ASC LIMIT 1 OFFSET $offset`)
-  const posts = query.get({ start: formatDateTime(new Date(`${yyyy}-${mm}-${dd}T00:00:00`)), end: formatDateTime(new Date(`${yyyy}-${mm}-${dd}T23:59:59`)), offset: parseInt(number) })
-  console.log(posts)
+  const post = query.get({ start: formatDateTime(new Date(`${yyyy}-${mm}-${dd}T00:00:00`)), end: formatDateTime(new Date(`${yyyy}-${mm}-${dd}T23:59:59`)), offset: parseInt(number) })
+  console.log(post)
 
-  if (!posts) {
+  if (!post) {
     return c.text(`404 Not Found`, 404)
   }
-
-  return c.text(`投稿を表示 - ${yyyy}年${mm}月${dd}日, 通し番号: ${number}\nタイトル: ${posts.title}\n内容(公開): ${posts.content_public}`)
+  
+  return c.html(<Page post={post} />)
 })
 
 // recipes
